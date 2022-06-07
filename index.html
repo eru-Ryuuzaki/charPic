@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>图片转字符</title>
+    <style>
+      .opts {
+        display: flex;
+        /* justify-content: center; */
+        flex-direction: column;
+        align-items: center;
+      }
+      #canvas {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-around;
+      }
+      .btnBox {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 10px 0;
+      }
+      .btn {
+        animation-name: glowing-primary;
+        color: #1b9af7;
+        margin: 5px;
+        animation-iteration-count: infinite;
+        animation-duration: 3s;
+        background: none;
+        border-width: 2px;
+        border-style: solid;
+        line-height: 36px;
+        border-radius: 4px;
+        border-color: #1b9af7;
+        font-weight: 300;
+        font-size: 16px;
+        text-decoration: none;
+        text-align: center;
+        height: 40px;
+        padding: 0 40px;
+        display: inline-block;
+        appearance: none;
+        cursor: pointer;
+        border: none;
+        box-sizing: border-box;
+        transition-property: all;
+        transition-duration: 0.3s;
+      }
+      @keyframes glowing-primary {
+        0% {
+          ox-shadow: 0 0 0 rgb(27 154 247 / 30%);
+        }
+        50% {
+          box-shadow: 0 0 20px rgb(27 154 247 / 80%);
+        }
+        100% {
+          box-shadow: 0 0 0 rgb(27 154 247 / 30%);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="opts">
+      <!-- 图片上传 -->
+      <form id="uf">
+        <input type="file" name="file" id="upButton" onchange="getImg()" />
+      </form>
+
+      <div>
+        <!-- 选择字符画大小 -->
+        <span>请输入字符画清晰度：</span>
+        <select id="thisSize">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected="selected">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+
+      <div>
+        <!-- 选择颜色 -->
+        <span>是否彩色：</span>
+        <select id="thisColor">
+          <option value="true">是</option>
+          <option value="false">否</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 执行按钮 -->
+    <div class="btnBox">
+      <div class="btn" onclick="start()">开始执行</div>
+    </div>
+    <div class="btnBox">
+      <div class="btn" onclick="downLoadImage()">保存图片</div>
+    </div>
+
+    <div id="canvas">
+      <canvas id="originalCanvas" width="0" height="0">originalCanvas</canvas>
+      <canvas id="charCanvas" width="0" height="0"></canvas>
+    </div>
+    <script>
+      /*
+        之前一直以为是第二次修改 canvas 的宽高不起效，换了好几种方法都不行，最后发现其实是因为 img 对象的宽高一直没变，需要新建 img 对象才能改变宽高信息
+      */
+      let img, reader; // 储存图片信息
+      let originalCanvas, charCanvas; // canvas实例
+      let originalCtx, charCtx; // 画笔
+      let loadingFlag,
+        charFileFlag = false; // 标识
+      // const IMAGE_SIZE = 800; // 生成画规模
+      const IMAGE_SIZE = 800;
+
+      // 执行
+      function start() {
+        if (!loadingFlag) {
+          alert("尚未加载图片或还没加载完成图片，请稍后再试~");
+          return;
+        }
+
+        init();
+
+        // 将图片绘制在canvas上
+        originalCtx.drawImage(img, 0, 0, img.width, img.height);
+        // 从canvas上获取像素信息
+        let imgData;
+        try {
+          imgData = originalCtx.getImageData(0, 0, img.width, img.height);
+        } catch {
+          alert("图片加载失败，请重新选择图片或刷新页面。");
+        }
+
+        // 读取颜色及规模
+        let scale = parseInt(document.getElementById("thisSize").value);
+        let color = document.getElementById("thisColor").value !== "false";
+        // 调整字符大小，追求更高精度就在这里调小
+        let size = 8 - scale;
+        // 生成主体，逐个读取字符
+        for (let i = 0; i < img.height; i = i + size) {
+          for (let j = 0; j < img.width; j = j + size) {
+            const curPoint = (i * img.width + j) * 4; // ×4是因为，1为r，2为g，3为b，4为a，四个是一组rgba值
+            const [r, g, b] = imgData.data.slice(curPoint, curPoint + 3);
+
+            const gray = r * 0.3 + g * 0.6 + b * 0.1; // 计算灰度值
+            const thisColor = `rgb(${r},${g},${b})`; // 保存像素点rgb值
+            let cur = color ? toText(gray, thisColor) : toText(gray); // 有颜色就转化rgb值，没颜色就不转
+            charCtx.fillStyle = color ? thisColor : "black";
+            charCtx.fillText(cur, j, i);
+          }
+        }
+        charFileFlag = true;
+        // alert("渲染成功");
+      }
+
+      // 读取图片
+      function getImg(file) {
+        loadingFlag = false;
+        img = new Image();
+        reader = new FileReader();
+        reader.readAsDataURL(document.getElementById("upButton").files[0]);
+        reader.onload = function () {
+          img.src = reader.result;
+          // console.log(reader, img);
+          loadingFlag = true;
+          //   alert("加载完成");
+        };
+      }
+
+      // 根据灰度转化字符，添加颜色
+      function toText(g, thisColor) {
+        let cur;
+
+        if (g <= 40) cur = "？";
+        else if (g > 40 && g <= 80) cur = "》";
+        else if (g > 80 && g <= 120) cur = "！";
+        else if (g > 120 && g <= 160) cur = "：";
+        else if (g > 160 && g <= 200) cur = "～";
+        else if (g > 200 && g <= 240) cur = "；";
+        else cur = ".";
+        return cur;
+      }
+      // 初始化
+      function init() {
+        // 先记录比率,如果宽，那么先缩放宽,再用比率算出长,反之同理，这里是保证不超过不超过设定规模
+        let rate = img.width / img.height;
+        if (rate > 1) {
+          img.width = IMAGE_SIZE;
+          img.height = IMAGE_SIZE / rate;
+        } else {
+          img.height = IMAGE_SIZE;
+          img.width = rate * IMAGE_SIZE;
+        }
+
+        charCanvas.setAttribute("width", img.width);
+        charCanvas.setAttribute("height", img.height);
+        originalCanvas.setAttribute("width", img.width);
+        originalCanvas.setAttribute("height", img.height);
+        charCtx.fillStyle = "white";
+        charCtx.fillRect(0, 0, img.width, img.height);
+      }
+      /*
+        canvas.toDataURL(type, encoderOptions);
+        type 可选
+          图片格式，默认为 image/png
+        encoderOptions 可选
+          在指定图片格式为 image/jpeg 或 image/webp 的情况下，可以从 0 到 1 的区间内选择图片的质量。如果超出取值范围，将会使用默认值 0.92。其他参数会被忽略。
+      */
+      function downLoadImage(name) {
+        if (!charFileFlag) {
+          alert("尚未生成字符图片，请先生成字符图片再进行操作~");
+          return;
+        }
+        let a = document.createElement("a");
+        a.href = charCanvas.toDataURL();
+        let completeFileName =
+          document.getElementById("upButton").files[0].name;
+        let fileName = completeFileName.substring(
+          0,
+          completeFileName.lastIndexOf(".")
+        );
+        console.log(fileName);
+        a.download = `_${fileName}.png`;
+        a.click();
+      }
+
+      window.onload = () => {
+        // 获取画布信息
+        originalCanvas = document.getElementById("originalCanvas");
+        originalCtx = originalCanvas.getContext("2d");
+        charCanvas = document.getElementById("charCanvas");
+        charCtx = charCanvas.getContext("2d");
+      };
+    </script>
+  </body>
+</html>
